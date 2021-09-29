@@ -1,0 +1,23 @@
+- hosts: all
+  become: yes
+  tasks:
+    - name: create the 'christians' user
+      user: name=christians append=yes state=present createhome=yes shell=/bin/bash
+
+    - name: install sudo
+      apt:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - sudo
+
+    - name: allow 'christians' to have passwordless sudo
+      lineinfile:
+        dest: /etc/sudoers
+        line: 'christians ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+
+    - name: set up authorized keys for the sammy user
+      authorized_key: user=christians key="{{item}}"
+      with_file:
+        - ~/.ssh/id_ed25519_uvavu.pub

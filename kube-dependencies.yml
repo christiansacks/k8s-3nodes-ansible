@@ -1,0 +1,110 @@
+- hosts: all
+  become: yes
+  tasks:
+   - name: install remote apt deps
+     apt:
+       name: "{{ item }}"
+       state: present
+     with_items:
+       - apt-transport-https
+       - ca-certificates
+       - gnupg2
+       - software-properties-common
+       - sudo
+
+   - name: add Docker apt-key
+     apt_key:
+       url: https://download.docker.com/linux/debian/gpg
+       state: present
+
+   - name: add Docker's APT repository
+     apt_repository:
+      repo: deb https://download.docker.com/linux/debian buster stable
+      state: present
+      filename: 'docker'
+
+   - name: install Docker
+     apt:
+       name: docker-ce
+       state: present
+       update_cache: true
+
+   - name: add Kubernetes apt-key
+     apt_key:
+       url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+       state: present
+
+   - name: add Kubernetes' APT repository
+     apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      state: present
+      filename: 'kubernetes'
+
+   - name: install kubelet
+     apt:
+       #name: kubelet=1.14.0-00
+       name: kubelet
+       state: present
+       update_cache: true
+
+   - name: install kubeadm
+     apt:
+       name: kubeadm
+       state: present
+
+   - name: create docker daemon.json
+     copy:
+       dest: /etc/docker/daemon.json
+       content: |
+         {
+           "default-address-pools":
+             [
+               {"base": "172.18.0.0/16",
+                "size": 24}
+             ],
+           "bip": "172.18.1.1/24",
+           "mtu": 1500,
+           "dns": ["10.88.16.1","10.88.16.2"],
+         
+           "exec-opts": ["native.cgroupdriver=systemd"],
+           "log-driver": "json-file",
+           "log-opts": {
+             "max-size": "100m"
+           },
+           "storage-driver": "overlay2"
+         }
+
+   - name: restart docker service
+     systemd:
+       state: restarted
+       name: docker
+
+   - name: turn swap off
+     shell: |
+       swapoff -a
+
+   - name: Disable SWAP in fstab since kubernetes can't work with swap enabled (2/2)
+     replace:
+       path: /etc/fstab
+       regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+       replace: '# \1'
+
+   - name: Add christians to sudo group
+     shell: |
+       usermod -aG sudo christians
+
+   - name: Enable passwordless sudo for sudo users
+     lineinfile:
+       dest: /etc/sudoers
+       state: present
+       regexp: '^%sudo'
+       line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+
+- hosts: master
+  become: yes
+  tasks:
+   - name: install kubectl
+     apt:
+       name: kubectl
+       state: present
+       force: yes
